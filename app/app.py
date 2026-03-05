@@ -1,8 +1,9 @@
 import asyncio
+import uuid
 
 from fastapi import FastAPI, HTTPException, File, UploadFile, Form, Depends
 from fastapi import FastAPI, HTTPException
-from app.schemas import PostCreate, PostResponse
+from app.schemas import PostCreate, PostResponse, UserRead, UserCreate, UserUpdate
 from app.db import Post, create_db_and_tables, get_async_session
 from sqlalchemy.ext.asyncio import AsyncSession
 from contextlib import asynccontextmanager
@@ -13,6 +14,7 @@ from app.images import upload_options
 import shutil
 import os
 import tempfile
+from app.users import auth_backend, current_active_user, fastapi_users
 
 
 @asynccontextmanager
@@ -21,6 +23,12 @@ async def lifespan(app: FastAPI):
     yield
 
 app = FastAPI(lifespan=lifespan)
+
+app.include_router(fastapi_users.get_auth_router(auth_backend), prefix='/auth/jwt', tags=["auth"])
+app.include_router(fastapi_users.get_register_router(UserRead, UserCreate), prefix='/auth', tags=["auth"])
+app.include_router(fastapi_users.get_reset_password_router(), prefix='/auth', tags=['auth'])
+app.include_router(fastapi_users.get_verify_router(UserRead), prefix='/auth', tags=['auth'])
+app.include_router(fastapi_users.get_users_router(UserRead, UserUpdate), prefix='/auth', tags=['auth'])
 
 
 @app.post("/upload")
@@ -76,6 +84,26 @@ async def get_feed(
 
 
 text_posts = {}
+
+
+@app.delete("/posts/{post_id}")
+async def delete_post(post_id: str, session: AsyncSession = Depends(get_async_session)):
+    # change the post_id into uuid object
+    try:
+        post_uuid = uuid.UUID(post_id)
+
+        result = await session.execute(select(Post).where(Post.id == post_uuid))
+        post = result.scalars().first() # return the exact result without looping through
+
+        if not post:
+            raise HTTPException(status_code=404, detail="Post not found")
+
+        await session.delete(post)
+        await session.commit()
+
+        return {"success": True, "message": "Post deleted successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # @app.get("/posts")
