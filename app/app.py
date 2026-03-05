@@ -1,3 +1,5 @@
+import asyncio
+
 from fastapi import FastAPI, HTTPException, File, UploadFile, Form, Depends
 from fastapi import FastAPI, HTTPException
 from app.schemas import PostCreate, PostResponse
@@ -26,40 +28,29 @@ async def upload_file(
         file: UploadFile = File(...),
         caption: str = Form(""),
         session: AsyncSession = Depends(get_async_session)
-):
-    temp_file_path = None
-    # create temp file
+    ):
+    # check if file type is correct
+    if not file.content_type.startswith(("image/", "video/")):
+        raise HTTPException(status_code=400, detail="Only images and videos allowed")
     try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splittext(file.filename)[1]) as temp_file:
-            temp_file_path = temp_file.name
-            shutil.copyfileobj(file.file, temp_file)
-        # upload the temp file
-        upload_result = imagekit.upload_file(
-            file=open(temp_file_path, "rb"),
-            file_name=file.filename,
-            options=upload_options(
-                use_unique_file_name=True,
-                tags=["backend-upload"]
-            )
+        upload_result = await asyncio.to_thread(
+            upload_image,
+            file=file.file,
+            file_name=file.filename
         )
-        # check the response
-        if upload_result.response.http_status_code == 200:
-            post = Post(
-                caption=caption,
-                url=upload_result.url,
-                file_type="video" if file.content_type.startswith("video/") else "image",
-                file_name=upload_result.name
-            )
-            session.add(post)
-            await session.commit()
-            await session.refresh(post)
-            return post
+
+        post = Post(
+            caption=caption,
+            url=upload_result.url,
+            file_type="video" if file.content_type.startswith("video/") else "image",
+            file_name=upload_result.name
+        )
+        session.add(post)
+        await session.commit()
+        await session.refresh(post)
+        return post
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        if temp_file_path and os.path.exists(temp_file_path):
-            os.unlink(temp_file_path)
-        file.file.close()
 
 
 @app.get("/feed")

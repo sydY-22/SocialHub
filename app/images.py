@@ -1,13 +1,14 @@
 from dotenv import load_dotenv
 from imagekitio import ImageKit
 import os
+from pathlib import Path
 
 load_dotenv()
 
 # initialize the imagekit
 imagekit = ImageKit(
-    private_key=os.getenv("IMAGEKIT_PRIVATE_KEY"),
-    base_url=os.getenv("IMAGEKIT_URL"),
+    private_key=os.getenv("IMAGEKIT_PRIVATE_KEY")
+    # base_url=os.getenv("IMAGEKIT_URL"),
 )
 
 # define imagekit upload options
@@ -16,23 +17,16 @@ upload_options = {
     "is_private_file": False, "response_fields": "tags,customCoordinates"
 }
 
-# define upload response
-# response = imagekit.files.upload(
-#     file=open("E:/Uploads/bean.jpg", "rb"),
-#     file_name="bean.jpg",
-#     folder="/Uploads/",
-#     public_key=os.getenv("IMAGEKIT_PUBLIC_KEY"),
-#     use_unique_file_name=True
-#
-# )
 
-
-def upload_image(file_path, file_name):
-    with open(file_path, "rb") as f:
-        response = imagekit.files.upload(
-            file=f,
-            file_name=file_name
-        )
+def upload_image(file, file_name):
+    response = imagekit.files.upload(
+        file=file,  # file object from FastAPI
+        file_name=file_name,
+        folder="/Uploads",
+        use_unique_file_name=True,
+        public_key=os.getenv("IMAGEKIT_PUBLIC_KEY"),
+        tags=["backend-upload"]
+    )
     return response
 
 
